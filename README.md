@@ -72,7 +72,7 @@ Dietary restrictions (vegan, diabetic, etc.)
 
 Frontend: React (Vite)
 
-Backend: Flask (Python)
+Backend: Node.js
 
 Database: MongoDB
 
@@ -190,4 +190,5 @@ FSSAI – https://www.fssai.gov.in
 
 This project is Part of D.E from Government Engineering College, Rajkot<br>
 By - Ravi, Akshat, Krupali, Ansh🥂
+
 

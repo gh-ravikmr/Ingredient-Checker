@@ -89,29 +89,6 @@ APIs: Groq API and Gemini API used
 | Tools    | VS Code, GitHub, Postman           |
 | Design   | Figma, Canva                       |
 
-ingredient-checker/
-│
-├── frontend/
-│   ├── src/
-│   ├── components/
-│   ├── pages/
-│   ├── App.tsx
-│   └── main.tsx
-│
-├── backend/
-│   ├── app.py
-│   ├── routes/
-│   ├── ocr/
-│   ├── models/
-│   └── requirements.txt
-│
-├── database/
-│   └── schemas/
-│
-├── .env.example
-├── README.md
-└── package.json
-<br>
 
 ⚙️ Installation & Setup
 🔹 Prerequisites
@@ -213,3 +190,4 @@ FSSAI – https://www.fssai.gov.in
 
 This project is Part of D.E from Government Engineering College, Rajkot<br>
 By - Ravi, Akshat, Krupali, Ansh🥂
+

@@ -15,6 +15,13 @@ import cacheManager from "./utils/cache.js";
 import Validators from "./utils/validators.js";
 import AnalysisHelpers from "./utils/helpers.js";
 import ErrorHandler from "./middleware/errorHandler.js";
+import cors from "cors";
+
+app.use(cors({
+  origin: "*", // for hackathon/demo
+  methods: ["GET", "POST"],
+}));
+
 
 // OCR functions
 import {

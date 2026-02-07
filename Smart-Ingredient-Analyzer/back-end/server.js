@@ -15,12 +15,8 @@ import cacheManager from "./utils/cache.js";
 import Validators from "./utils/validators.js";
 import AnalysisHelpers from "./utils/helpers.js";
 import ErrorHandler from "./middleware/errorHandler.js";
-import cors from "cors";
 
-app.use(cors({
-  origin: "*", // for hackathon/demo
-  methods: ["GET", "POST"],
-}));
+
 
 
 // OCR functions
@@ -41,6 +37,10 @@ const PORT = env.PORT;
 
 // Security middleware
 app.use(helmet());
+app.use(cors({
+  origin: "*", // for hackathon/demo
+  methods: ["GET", "POST"],
+}));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -58,25 +58,25 @@ app.get("/", (req, res) => {
 });
 
 
-app.options("*", cors());
-app.use(
-  cors({
-    origin:
-      env.NODE_ENV === "production"
-        ? [
-            "https://smart-ingredient-analyzer.vercel.app",
-            "https://ai-ingredient-analyzer.vercel.app",
-            /\.vercel\.app$/,
-          ]
-        : [
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "http://localhost:4173",
-            "http://127.0.0.1:5173",
-          ],
-    credentials: true,
-  })
-);
+// app.options("*", cors());
+// app.use(
+//   cors({
+//     origin:
+//       env.NODE_ENV === "production"
+//         ? [
+//             "https://smart-ingredient-analyzer.vercel.app",
+//             "https://ai-ingredient-analyzer.vercel.app",
+//             /\.vercel\.app$/,
+//           ]
+//         : [
+//             "http://localhost:3000",
+//             "http://localhost:5173",
+//             "http://localhost:4173",
+//             "http://127.0.0.1:5173",
+//           ],
+//     credentials: true,
+//   })
+// );
 
 // Body parser
 app.use(bodyParser.json({ limit: "10mb" }));

@@ -73,6 +73,11 @@ app.use((req, res, next) => {
   next();
 });
 
+app.get("/", (req, res) => {
+  res.json({ status: "Ingredient Checker backend is running 🚀" });
+});
+
+
 // ============= ROUTES =============
 
 app.get("/health", (req, res) => {

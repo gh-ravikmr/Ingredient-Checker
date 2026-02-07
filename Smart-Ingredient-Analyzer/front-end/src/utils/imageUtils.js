@@ -2,10 +2,22 @@
 
 const API = import.meta.env.VITE_BACKEND_URL;
 
-fetch(`${API}/api/ocr`, {
-  method: "POST",
-  body: formData
-});
+export const sendImageToOCR = async (imageBlobOrFile) => {
+  const formData = new FormData(); // ✅ DEFINE IT
+  formData.append("image", imageBlobOrFile); // must match backend field name
+
+  const response = await fetch(`${API}/api/ocr`, {
+    method: "POST",
+    body: formData
+  });
+
+  if (!response.ok) {
+    throw new Error("OCR request failed");
+  }
+
+  return await response.json();
+};
+
 
 
 

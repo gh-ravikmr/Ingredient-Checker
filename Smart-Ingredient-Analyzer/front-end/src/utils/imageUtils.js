@@ -1,5 +1,12 @@
 // Enhanced image utilities with perfect mobile optimization
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+fetch(`${API_BASE}/api/ocr`, {
+  method: "POST",
+  body: formData,
+});
+
 export const detectDeviceCapabilities = () => {
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   const isSlowConnection = navigator.connection && 

@@ -44,6 +44,13 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // CORS
+app.get("/", (req, res) => {
+  res.status(200).json({
+    message: "Ingredient Checker backend is running 🚀"
+  });
+});
+
+
 app.options("*", cors());
 app.use(
   cors({
@@ -73,9 +80,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/", (req, res) => {
-  res.json({ status: "Ingredient Checker backend is running 🚀" });
-});
+
 
 
 // ============= ROUTES =============

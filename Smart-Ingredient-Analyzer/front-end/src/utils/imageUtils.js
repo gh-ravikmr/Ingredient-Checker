@@ -6,7 +6,7 @@ export const sendImageToOCR = async (imageBlobOrFile) => {
   const formData = new FormData(); // ✅ DEFINE IT
   formData.append("image", imageBlobOrFile); // must match backend field name
 
-  const response = await fetch(`${API}/api/ocr`, {
+  const response = await fetch(`${API}/api/analyze`, {
     method: "POST",
     body: formData
   });

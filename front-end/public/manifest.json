@@ -1,0 +1,20 @@
+{
+  "name": "AI Ingredient Analyzer",
+  "short_name": "AI Ingredients",
+  "description": "AI-powered ingredient analyzer for healthier food choices",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/vite.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["health", "food", "utilities"],
+  "lang": "en"
+}

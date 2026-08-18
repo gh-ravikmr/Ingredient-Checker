@@ -5,9 +5,13 @@ import { GROQ_TIMEOUT, GROQ_TOKENS } from "../configuration/constants.js";
 
 export class GroqService {
   constructor() {
-    this.baseUrl = "https://api.groq.com/openai/v1/chat/completions";
+    this.baseUrl = env.GROQ_BASE_URL;
     this.apiKey = env.GROQ_API_KEY;
     this.model = env.GROQ_MODEL;
+
+    if (!this.model) {
+      throw new Error("GROQ_MODEL is not configured");
+    }
   }
 
   createPrompt(ingredients) {
@@ -63,10 +67,7 @@ Expected JSON format:
 
       const startTime = Date.now();
 
-      const response = await Promise.race([
-        this.sendRequest(prompt, maxTokens),
-        this.createTimeoutPromise(timeout),
-      ]);
+      const response = await this.sendRequest(prompt, maxTokens, timeout);
 
       const aiTime = Date.now() - startTime;
 
@@ -80,6 +81,8 @@ Expected JSON format:
         }
         const err = new Error(errorMessage);
         err.code = "GROQ_HTTP_ERROR";
+        // Surface upstream rate limiting as-is, everything else as a bad gateway.
+        err.statusCode = response.status === 429 ? 429 : 502;
         throw err;
       }
 
@@ -88,6 +91,7 @@ Expected JSON format:
       if (data.error) {
         const err = new Error(data.error.message || "Groq API error");
         err.code = "GROQ_API_ERROR";
+        err.statusCode = 502;
         throw err;
       }
 
@@ -96,6 +100,7 @@ Expected JSON format:
       if (!groqText) {
         const err = new Error("Empty response from Groq API");
         err.code = "GROQ_EMPTY_CONTENT";
+        err.statusCode = 502;
         throw err;
       }
 
@@ -114,6 +119,7 @@ Expected JSON format:
       if (!arrayMatch) {
         const err = new Error("Groq did not return a JSON array");
         err.code = "GROQ_NO_JSON";
+        err.statusCode = 502;
         throw err;
       }
 
@@ -137,6 +143,7 @@ Expected JSON format:
             `Failed to parse Groq response: ${parseError.message}`
           );
           err.code = "GROQ_PARSE_ERROR";
+          err.statusCode = 502;
           throw err;
         }
 
@@ -149,6 +156,7 @@ Expected JSON format:
             `Failed to parse Groq response after salvage: ${error2.message}`
           );
           err.code = "GROQ_PARSE_ERROR";
+          err.statusCode = 502;
           throw err;
         }
       }
@@ -161,6 +169,7 @@ Expected JSON format:
       if (analysis.length === 0) {
         const err = new Error("Empty analysis array");
         err.code = "GROQ_EMPTY_ANALYSIS";
+        err.statusCode = 502;
         throw err;
       }
 
@@ -175,31 +184,43 @@ Expected JSON format:
     }
   }
 
-  async sendRequest(prompt, maxTokens) {
-    return fetch(this.baseUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.model,
-        temperature: 0.1,
-        max_tokens: maxTokens,
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-      }),
-    });
-  }
+  async sendRequest(prompt, maxTokens, timeoutMs) {
+    // AbortController rather than Promise.race: a losing race still leaves the
+    // request (and its timer) running for the full timeout.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  createTimeoutPromise(timeoutMs) {
-    return new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Groq timeout")), timeoutMs)
-    );
+    try {
+      return await fetch(this.baseUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.model,
+          temperature: 0.1,
+          max_tokens: maxTokens,
+          messages: [
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+        }),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error.name === "AbortError") {
+        const err = new Error(`Groq timeout after ${timeoutMs}ms`);
+        err.code = "GROQ_TIMEOUT";
+        err.statusCode = 504;
+        throw err;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
 

@@ -6,7 +6,7 @@ import {
   ultraFastPreprocess,
   preprocessImage,
   performOCRWithMultipleVersions,
-} from "../optimized-ocr.js";
+} from "./optimized-ocr.js";
 
 export class OCRService {
   async processImage(imageBuffer, options = {}) {

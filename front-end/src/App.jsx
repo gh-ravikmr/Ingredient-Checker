@@ -7,6 +7,11 @@ import ImagePreview from "./components/ImagePreview";
 import AnalysisResult from "./components/AnalysisResult";
 import HowItWorks from "./components/HowItWorks";
 import { compressImage, detectDeviceCapabilities } from "./utils/imageUtils";
+import { API_BASE_URL } from "./config";
+
+// Must comfortably exceed the backend's own OCR + AI budget, otherwise the
+// client aborts requests the server is still successfully working on.
+const REQUEST_TIMEOUT_MS = 60000;
 
 function App() {
   const webcamRef = useRef(null);
@@ -35,22 +40,6 @@ function App() {
     console.log('📱 Device capabilities:', capabilities);
   }, []);
 
-  // Get API URL with fallback
-  const getApiUrl = useCallback(() => {
-    // Try multiple possible API URLs
-    const possibleUrls = [
-      import.meta.env.VITE_API_URL,
-      import.meta.env.VITE_API,
-      "http://localhost:5000",
-      "http://127.0.0.1:5000",
-      "https://smart-ingredient-analyzer.onrender.com"
-    ];
-    
-    const apiUrl = possibleUrls.find(url => url && url.trim()) || "http://localhost:5000";
-    console.log('🌐 Using API URL:', apiUrl);
-    return apiUrl;
-  }, []);
-
   // Enhanced background processing function
   const startBackgroundProcessing = useCallback(async (imageData) => {
     setProcessingState({
@@ -71,31 +60,31 @@ function App() {
         progress: 30,
       }));
 
-      const API = getApiUrl();
+      const API = API_BASE_URL;
 
-      // Create request with timeout based on device
-      const timeoutMs = settings.isMobile ? 15000 : 20000;
-      
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
       console.log(`🌐 Making request to: ${API}/api/analyze`);
       console.log(`📊 Request settings: fastMode=${settings.fastMode}, isMobile=${settings.isMobile}`);
 
-      const response = await fetch(`${API}/api/analyze`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ 
-          image: imageData,
-          fastMode: settings.fastMode,
-          isMobile: settings.isMobile
-        }),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
+      let response;
+      try {
+        response = await fetch(`${API}/api/analyze`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            image: imageData,
+            fastMode: settings.fastMode,
+            isMobile: settings.isMobile
+          }),
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       console.log(`📡 Response status: ${response.status}`);
 
@@ -129,9 +118,15 @@ function App() {
           userFriendlyMessage = "❌ No ingredient list found. Please focus on the ingredients section.";
         } else if (errorData.code === "INVALID_IMAGE_DATA") {
           userFriendlyMessage = "❌ Invalid image format. Please try a different image.";
-        } else if (errorData.code === "OCR_FAILED") {
+        } else if (errorData.code === "OCR_FAILED" || errorData.code === "NO_TEXT_DETECTED") {
           userFriendlyMessage = "❌ Could not read text from image. Please try a clearer photo.";
-        } else if (errorData.code === "GEMINI_API_ERROR") {
+        } else if (errorData.code === "INVALID_IMAGE") {
+          userFriendlyMessage = "❌ That doesn't look like a food label. Please photograph the ingredients list.";
+        } else if (errorData.code === "IMAGE_TOO_SMALL") {
+          userFriendlyMessage = "❌ Image is too small to read. Please use a higher-resolution photo.";
+        } else if (response.status === 502 || response.status === 504) {
+          userFriendlyMessage = "❌ The analysis service is unavailable right now. Please try again shortly.";
+        } else if (errorData.code === "GEMINI_API_ERROR" || errorData.code === "GROQ_API_ERROR") {
           userFriendlyMessage = "❌ AI analysis failed. Please try again in a moment.";
         } else if (errorData.code === "QUOTA_EXCEEDED") {
           userFriendlyMessage = "❌ Service temporarily unavailable. Please try again later.";
@@ -182,7 +177,7 @@ function App() {
       
       if (error.name === 'AbortError') {
         errorMsg = "❌ Request timed out. Please try with a clearer, smaller image.";
-      } else if (error.message.includes('Failed to fetch')) {
+      } else if (String(error?.message || "").includes('Failed to fetch')) {
         errorMsg = "❌ Network error. Please check your internet connection.";
       }
 
@@ -201,12 +196,12 @@ function App() {
         }));
       }, 3000);
     }
-  }, [deviceCapabilities, getApiUrl]);
+  }, [deviceCapabilities]);
 
   // Enhanced capture function
-  const captureImage = useCallback(async () => {
+  const captureImage = useCallback(async (capturedImage) => {
     try {
-      const imageSrc = webcamRef.current?.getScreenshot();
+      const imageSrc = capturedImage || webcamRef.current?.getScreenshot();
       if (!imageSrc) {
         setErrorMessage("❌ Could not capture image. Please allow camera access.");
         return;
@@ -318,10 +313,11 @@ function App() {
           <div className="text-center space-y-2 py-2">
             <div className="flex items-center justify-center gap-2 sm:gap-3 mb-2">
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-600 to-green-600 rounded-xl flex items-center justify-center shadow-lg transform hover:scale-105 transition-transform duration-300">
-                <svg className="w-5 h-5 sm:w-7 sm:h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 7.5V8.5C15 9.6 14.1 10.5 13 10.5S11 9.6 11 8.5V7.5L9 7.5V8.5C9 9.6 8.1 10.5 7 10.5S5 9.6 5 8.5V7.5L3 7V9C3 10.1 3.9 11 5 11V12.5C5 13.6 5.9 14.5 7 14.5S9 13.6 9 12.5V11H15V12.5C15 13.6 15.9 14.5 17 14.5S19 13.6 19 12.5V11C20.1 11 21 10.1 21 9ZM7.5 18C7.5 18.8 8.2 19.5 9 19.5S10.5 18.8 10.5 18V16.5H13.5V18C13.5 18.8 14.2 19.5 15 19.5S16.5 18.8 16.5 18V16.5H7.5V18Z" />
-                </svg>
-                <img alt="" src="./greenlogo.jpg"></img>
+                <img
+                  src="/greenlogo.jpg"
+                  alt="Ingredient Analyzer logo"
+                  className="w-full h-full object-cover rounded-xl"
+                />
               </div>
               <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-blue-700 via-slate-700 to-green-700 bg-clip-text text-transparent leading-tight">
                 <span className="inline-block transform hover:scale-105 transition-all duration-500 hover:text-blue-800">

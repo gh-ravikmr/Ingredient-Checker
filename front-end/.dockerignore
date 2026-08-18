@@ -1,8 +1,9 @@
 node_modules
 dist
-.dockerignore
-Dockerfile
 .git
 .gitignore
-.env
+.dockerignore
+Dockerfile
+nginx.conf
 *.log
+.env.local

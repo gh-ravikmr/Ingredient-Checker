@@ -1,5 +1,7 @@
 node_modules
 .git
 *.log
+.env
+.env.*
 Dockerfile
 .dockerignore

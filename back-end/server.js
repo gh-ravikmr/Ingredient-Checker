@@ -1,37 +1,24 @@
 // server.js - Main Express Server (PRODUCTION LEVEL)
 import express from "express";
 import cors from "cors";
-import bodyParser from "body-parser";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import multer from "multer";
-
-const upload = multer({
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-});
-
 
 // Config
 import { env, validateEnv } from "./configuration/env.js";
-import { RATE_LIMIT_CONFIG } from "./configuration/constants.js";
+import {
+  RATE_LIMIT_CONFIG,
+  IMAGE_LIMITS,
+} from "./configuration/constants.js";
 
 // Services & Utils
 import groqService from "./services/groqService.js";
 import cacheManager from "./utils/cache.js";
-import Validators from "./utils/validators.js";
 import AnalysisHelpers from "./utils/helpers.js";
 import ErrorHandler from "./middleware/errorHandler.js";
 
-
-
-
 // OCR functions
-import {
-  preprocessImage,
-  performOCRWithMultipleVersions,
-  performSmartOCR,
-  ultraFastPreprocess,
-} from "./optimized-ocr.js";
+import { performSmartOCR, ultraFastPreprocess } from "./optimized-ocr.js";
 
 // Validate environment
 validateEnv();
@@ -48,47 +35,22 @@ app.use(cors({
   methods: ["GET", "POST"],
 }));
 
-// Rate limiting
+// Rate limiting — scoped to /api so platform health checks are never throttled.
 const limiter = rateLimit({
   windowMs: RATE_LIMIT_CONFIG.windowMs,
   max: RATE_LIMIT_CONFIG.max,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { error: "Too many requests, please try again later" },
 });
-app.use(limiter);
-app.use(express.json({ limit: "20mb" }));
+app.use("/api", limiter);
+
+// Base64 inflates a binary image by ~33%, so the JSON limit has to leave room
+// on top of the raw image ceiling.
+app.use(
+  express.json({ limit: `${Math.ceil((IMAGE_LIMITS.maxSizeBytes * 1.4) / (1024 * 1024))}mb` })
+);
 app.use(express.urlencoded({ extended: true }));
-
-
-// CORS
-app.get("/", (req, res) => {
-  res.status(200).json({
-    message: "Ingredient Checker backend is running 🚀"
-  });
-});
-
-
-// app.options("*", cors());
-// app.use(
-//   cors({
-//     origin:
-//       env.NODE_ENV === "production"
-//         ? [
-//             "https://smart-ingredient-analyzer.vercel.app",
-//             "https://ai-ingredient-analyzer.vercel.app",
-//             /\.vercel\.app$/,
-//           ]
-//         : [
-//             "http://localhost:3000",
-//             "http://localhost:5173",
-//             "http://localhost:4173",
-//             "http://127.0.0.1:5173",
-//           ],
-//     credentials: true,
-//   })
-// );
-
-// Body parser
-app.use(bodyParser.json({ limit: "10mb" }));
 
 // Request timing middleware
 app.use((req, res, next) => {
@@ -96,10 +58,13 @@ app.use((req, res, next) => {
   next();
 });
 
-
-
-
 // ============= ROUTES =============
+
+app.get("/", (req, res) => {
+  res.status(200).json({
+    message: "Ingredient Checker backend is running 🚀",
+  });
+});
 
 app.get("/health", (req, res) => {
   res.json({ status: "OK", timestamp: new Date().toISOString() });
@@ -157,14 +122,14 @@ app.post("/api/analyze", async (req, res, next) => {
     const sizeKB = imageBuffer.length / 1024;
     console.log(`📊 Image size: ${sizeKB.toFixed(1)} KB`);
 
-    if (imageBuffer.length < 1024) {
+    if (imageBuffer.length < IMAGE_LIMITS.minSizeBytes) {
       return res.status(400).json({
         error: "Image too small",
         code: "IMAGE_TOO_SMALL",
       });
     }
 
-    if (imageBuffer.length > 15 * 1024 * 1024) {
+    if (imageBuffer.length > IMAGE_LIMITS.maxSizeBytes) {
       return res.status(413).json({
         error: "Image too large",
         code: "IMAGE_TOO_LARGE",
@@ -176,15 +141,11 @@ app.post("/api/analyze", async (req, res, next) => {
     try {
       console.log("🔍 Starting OCR...");
 
-      try {
-        const processed = await ultraFastPreprocess(imageBuffer, isMobile);
-        bestOcrResult = await performSmartOCR(processed);
-        console.log("⚡ Fast OCR success");
-      } catch {
-        const processedImages = await preprocessImage(imageBuffer);
-        bestOcrResult = await performOCRWithMultipleVersions(processedImages);
-        console.log("🧠 Standard OCR success");
-      }
+      // ultraFastPreprocess already returns the original buffer if sharp fails,
+      // and performSmartOCR falls back from Gemini to Tesseract on its own.
+      const processed = await ultraFastPreprocess(imageBuffer, isMobile);
+      bestOcrResult = await performSmartOCR(processed);
+      console.log(`⚡ OCR success via ${bestOcrResult.method}`);
 
       if (!bestOcrResult?.text) {
         return res.status(400).json({
@@ -193,10 +154,20 @@ app.post("/api/analyze", async (req, res, next) => {
         });
       }
     } catch (err) {
-      return res.status(400).json({
-        error: "OCR failed",
-        code: "OCR_FAILED",
-        details: err.message,
+      const message = String(err?.message || "");
+
+      // Keep the actionable "this isn't an ingredient label" wording instead of
+      // flattening every OCR problem into a generic failure.
+      const isNotALabel =
+        message.includes("Invalid ingredient image") ||
+        message.includes("food product label");
+
+      return res.status(isNotALabel ? 422 : 400).json({
+        error: isNotALabel
+          ? "Please upload a clear image of a food label's ingredient list"
+          : "OCR failed",
+        code: isNotALabel ? "INVALID_IMAGE" : "OCR_FAILED",
+        details: message,
       });
     }
 
@@ -261,14 +232,12 @@ app.post("/api/analyze", async (req, res, next) => {
 });
 
 // 404 handler
-app.all("*", (req, res) => {
+app.use((req, res) => {
   res.status(404).json({ error: "Endpoint not found" });
 });
 
 // Global error handler
-app.use((error, req, res, next) => {
-  ErrorHandler.handle(error, req, res);
-});
+ErrorHandler.setupGlobalHandler(app);
 
 // ============= GRACEFUL SHUTDOWN =============
 
@@ -286,7 +255,7 @@ process.on("SIGINT", () => {
 
 // ============= START SERVER =============
 
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Smart Food Analyzer API running on port ${PORT}`);
   console.log(`📍 Environment: ${env.NODE_ENV}`);
   console.log(`🤖 AI Model: ${env.GROQ_MODEL}`);

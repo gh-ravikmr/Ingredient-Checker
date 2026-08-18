@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-ssr
+
+# .env is committed on purpose: Vite inlines VITE_* at build time and these
+# values are public. Machine-specific overrides go in .env.local.
+*.local
+
+logs
+*.log
+npm-debug.log*
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea

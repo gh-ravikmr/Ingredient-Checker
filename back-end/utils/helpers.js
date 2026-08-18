@@ -3,7 +3,7 @@ import { HARMFUL_INGREDIENTS, ALLERGENS } from "../configuration/constants.js";
 
 export class AnalysisHelpers {
   static extractIngredients(text) {
-    if (!text || text.trim().length === 0) {
+    if (typeof text !== "string" || text.trim().length === 0) {
       return "";
     }
 
@@ -75,7 +75,7 @@ export class AnalysisHelpers {
 
   static detectAllergens(ingredients) {
     const detectedAllergens = [];
-    const ingredientsLower = ingredients.toLowerCase();
+    const ingredientsLower = String(ingredients || "").toLowerCase();
 
     for (const [allergen, keywords] of Object.entries(ALLERGENS)) {
       if (keywords.some((keyword) => ingredientsLower.includes(keyword))) {
@@ -92,8 +92,11 @@ export class AnalysisHelpers {
     let badCount = 0;
     let neutralCount = 0;
 
-    analysis.forEach((item) => {
-      switch (item.status.toLowerCase()) {
+    // The AI response is untrusted: an entry may be missing "status" entirely.
+    const items = Array.isArray(analysis) ? analysis : [];
+
+    items.forEach((item) => {
+      switch (String(item?.status || "").toLowerCase()) {
         case "good":
           goodCount++;
           break;
@@ -117,8 +120,10 @@ export class AnalysisHelpers {
   }
 
   static detectHarmfulIngredients(analysis) {
+    if (!Array.isArray(analysis)) return [];
+
     return analysis.filter((item) =>
-      HARMFUL_INGREDIENTS.has(item.ingredient.toLowerCase())
+      HARMFUL_INGREDIENTS.has(String(item?.ingredient || "").toLowerCase())
     );
   }
 }

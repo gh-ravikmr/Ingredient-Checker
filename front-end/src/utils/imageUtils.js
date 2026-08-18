@@ -1,23 +1,22 @@
 // Enhanced image utilities with perfect mobile optimization
 
-const API = import.meta.env.VITE_BACKEND_URL;
+import { API_BASE_URL } from "../config";
 
-export const sendImageToOCR = async (imageBlobOrFile) => {
-  const formData = new FormData(); // ✅ DEFINE IT
-  formData.append("image", imageBlobOrFile); // must match backend field name
+// The backend takes a base64 data URL in a JSON body, not multipart form data.
+export const sendImageToOCR = async (base64Image, options = {}) => {
+  const { fastMode = true, isMobile = false } = options;
 
-  const response = await fetch(`${API}/api/analyze`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    image: base64Image, // data:image/jpeg;base64,...
-    fastMode: true,
-    isMobile: false,
-  }),
-});
-
+  const response = await fetch(`${API_BASE_URL}/api/analyze`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      image: base64Image, // data:image/jpeg;base64,...
+      fastMode,
+      isMobile,
+    }),
+  });
 
   if (!response.ok) {
     throw new Error("OCR request failed");
@@ -25,9 +24,6 @@ export const sendImageToOCR = async (imageBlobOrFile) => {
 
   return await response.json();
 };
-
-
-
 
 export const detectDeviceCapabilities = () => {
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -98,23 +94,13 @@ export const compressImage = (file, quality = 0.8, maxWidth = 1200) => {
           // Draw image
           ctx.drawImage(img, 0, 0, width, height);
           
-          // Keep original colors - no grayscale conversion
-          // Only apply minimal enhancement if needed
-          const imageData = ctx.getImageData(0, 0, width, height);
-          const data = imageData.data;
-          
-          // Skip image processing to preserve original quality
-          // The original image is already drawn on canvas
-          
+          // Original colors are kept as-is: the drawn canvas is already what we
+          // want to encode, no pixel post-processing needed.
+
           // Use very high quality for OCR
           const ocrQuality = Math.max(quality, 0.95); // Minimum 95% quality
           const compressedDataUrl = canvas.toDataURL('image/jpeg', ocrQuality);
-          
-          // Log compression stats
-          const originalSize = file.length || 0;
-          const compressedSize = compressedDataUrl.length;
-          const compressionRatio = originalSize > 0 ? ((originalSize - compressedSize) / originalSize * 100).toFixed(1) : 0;
-          
+
           console.log(`📊 Image processed: ${width}x${height}, quality=${ocrQuality}`);
           
           resolve(compressedDataUrl);
